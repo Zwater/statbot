@@ -1,0 +1,16 @@
+{
+    "token"  : "Your bot's token here",
+    "prefix" : "%",
+    "ignore_channels" : ["an array", "of ignored channel names"],
+    "influx" : {
+        "host" : "your.influx.server:8006",
+        "database" : "your_database",
+        "username": "stats",
+        "password" : "statsarecool"
+    },
+    "elastic": {
+        "enabled" : "true",
+        "host" : "your.elasticsearch.server:9200",
+        "index" : "your_index.chatmessage"
+    }
+}
