@@ -7,7 +7,7 @@ const elasticsearch = require('elasticsearch');
 const request = require('request');
 if (config.elastic.enabled == "true") {
     var elastic = new elasticsearch.Client({
-        host: 'http://oort.zwater.us:9200'
+        host: config.elastic.host
     });
 }
 var checkusers = {}
