@@ -69,13 +69,9 @@ async function doRoles(message, xp) {
         if (xp >= xpValue) {
             // Embeds stuff
             //
-            if (xpValue == 1000 && !message.member.roles.find(role => role.name === '1000xp')) {
+            if (xpValue == 2500 && !message.member.roles.find(role => role.name === '2500xp')) {
                 if (message.guild.roles.find(role => role.name === 'embeds')) {
                     message.member.addRole(message.guild.roles.find(role => role.name === 'embeds'))
-                }
-            } else if (xpValue == 2500 && !message.member.roles.find(role => role.name === '2500xp')) {
-                if (message.guild.roles.find(role => role.name === 'embeds-all')) {
-                    message.member.addRole(message.guild.roles.find(role => role.name === 'embeds-all'))
                 }
             }
             if (!message.guild.roles.find(role => role.name === xpValue + 'xp')) {
