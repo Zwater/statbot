@@ -13,6 +13,7 @@
     "elasticsearch": "^15.3.0",
     "fs": "0.0.1-security",
     "influx": "^5.0.7",
+    "node-markovify": "^1.0.3",
     "request": "^2.88.0"
   }
 }
