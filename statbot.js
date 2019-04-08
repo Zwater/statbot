@@ -11,8 +11,6 @@ if (config.elastic.enabled == "true") {
     });
 }
 var checkusers = {}
-var typing = {}
-var typingStop = {}
 client.on("ready", () => {
     console.log(`Bot has started, with ${client.users.size} users, in ${client.channels.size} channels of ${client.guilds.size} guilds.`);
     client.user.setActivity('With Data');
@@ -51,7 +49,6 @@ var influx = new Influx.InfluxDB({
                 leaveDate: Influx.FieldType.INTEGER,
                 xp: Influx.FieldType.INTEGER,
                 wordCount: Influx.FieldType.INTEGER,
-                wpm: Influx.FieldType.INTEGER
             },
             tags: [
                 'author',
@@ -225,13 +222,7 @@ async function getUserData(message, m, args) {
             `SELECT LAST(xp)
             FROM chatMessage
             WHERE \"author\"=\'${id}\'
-            AND \"server\" =\'${message.guild.id}\'`,
-
-            `SELECT MEDIAN(wpm)
-            FROM chatMessage
-            WHERE \"author\"=\'${id}\'
-            AND \"server\"=\'${message.guild.id}\'
-            fill(0)`
+            AND \"server\" =\'${message.guild.id}\'`
         ])
         .then(async results => {
             if (typeof results !== 'undefined') {
@@ -259,8 +250,6 @@ async function getUserData(message, m, args) {
                 var channelString = ""
                 var other = 0
                 var forceother = config.ignore_channels
-                //var wpm = results[7][0].median
-                var wpm = 0
                 channelBrkdn.forEach(function(value){
                     // Generate the string for all-time channel participation, as a percentage
                     // of the user's all-time messages
@@ -291,7 +280,6 @@ async function getUserData(message, m, args) {
                         {name: '**Total messages, last 7 days:**', value: totalMsgsWk},
                         {name: '**Average messages per day, last 7 days:**', value: Math.round(avgMsgsD)},
                         {name: '**Average message length, last 7 days:**', value: Math.round(avgLen) + ' Characters'},
-                        {name: '**Average WPM, All Time:**', value: Math.round(wpm)},
                         {name: '**All-time activity by channel:**', value: channelString
                         }
                     ]
@@ -300,33 +288,6 @@ async function getUserData(message, m, args) {
         })
     checkUser(message)
 }
-client.on("typingStart", async (channel, user) => {
-    //console.log(typing.channel.name)
-    //console.log(`${user.tag} started typing in ${channel.name}`)
-    console.log(`${user.tag} started typing, last timestamp ${typing[user.id]}`)
-    var timestamp = new Date()
-    var seconds = Math.round(timestamp / 1000)
-    var diff = seconds - typing[user.id]
-    //console.log(diff + ' seconds diff')
-    console.log(`is a ${typeof typing[user.id]}`)
-    if (typeof typing[user.id] == 'undefined') {
-        typing[user.id] = seconds
-        console.log(`create user ${user.tag}`)
-    } else if (typing[user.id] = 0 || diff > 120) {
-            typing[user.id] = seconds
-            console.log(`new typing event for ${user.tag}`)
-
-    } else {
-        typing[user.id] = typing[user.id]
-        console.log(`${user.tag} is still typing`)
-    }
-})
-client.on("typingStop", async (channel, user) => {
-    console.log(`${user.tag} stopped typing`)
-    var timestamp = new Date()
-    var seconds = Math.round(timestamp / 1000)
-    typingStop[user.id] = timestamp
-})
 
 client.on("guildMemberAdd", async member => {
     var timestamp = new Date();
@@ -385,22 +346,6 @@ client.on("message", async message => {
     if (message.cleanContent) {
         var wordCount = message.cleanContent.split(' ').length
     }
-    if (typing[message.author.id]){
-        var timestamp = new Date()
-        var seconds = Math.round(timestamp / 1000)
-        var typeTime = seconds - typing[message.author.id]
-        typing[message.author.id] = 0
-        if (typeTime == 0) {
-            typeTime = 1
-        }
-        if (message.cleanContent.length < 5) {
-            var wpmWordCount = 1
-        } else {
-            var wpmWordCount = message.cleanContent.length / 5
-        }
-        var wpm = Math.round((wpmWordCount * 60) / typeTime)
-        console.log (`${message.author.tag} spent ${typeTime} seconds typing a ${wpmWordCount} word message, for a WPM of ${wpm}`)
-    }
     log(message)
     function log(message) {
         influx.writePoints([
@@ -424,8 +369,6 @@ client.on("message", async message => {
                     channelName: message.channel.name,
                     serverID: message.guild.id,
                     serverName: message.guild.name,
-                    wordCount: wpmWordCount,
-                    wpm: wpm
                 }
             }
         ])
