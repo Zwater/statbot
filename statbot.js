@@ -5,6 +5,7 @@ const Influx = require('influx');
 const config = require("./config.json");
 const elasticsearch = require('elasticsearch');
 const request = require('request');
+const markovText = require('node-markovify').markovText;
 if (config.elastic.enabled == "true") {
     var elastic = new elasticsearch.Client({
         host: config.elastic.host
@@ -222,7 +223,13 @@ async function getUserData(message, m, args) {
             `SELECT LAST(xp)
             FROM chatMessage
             WHERE \"author\"=\'${id}\'
-            AND \"server\" =\'${message.guild.id}\'`
+            AND \"server\" =\'${message.guild.id}\'`,
+
+            `SELECT SAMPLE(messageText,50)
+            FROM chatMessage
+            WHERE \"server\"='${message.guild.id}'
+            AND \"author\"='${id}'
+            AND TIME >= now() - 30d`
         ])
         .then(async results => {
             if (typeof results !== 'undefined') {
@@ -244,6 +251,7 @@ async function getUserData(message, m, args) {
                 } else {
                     var xp = results[6][0].last
                 }
+                var randomMessages = results[7]
                 var ratio = Math.round((totalMsgs / xp) * 100) / 100
                 var channel = ""
                 var msgs
@@ -266,6 +274,19 @@ async function getUserData(message, m, args) {
                         }
                     }
                 })
+                randomMessageCorpus = []
+                randomMessages.forEach(value => randomMessageCorpus.push(value.sample))
+                randomMessageMarkov = new markovText()
+                randomMessageMarkov.init({
+                    corpus: randomMessageCorpus,
+                    state_size: 3
+                })
+                randomMessageText = randomMessageMarkov.predict({
+                    init_state: null,
+                    max_chars: 150,
+                    numberOfSentences: 1,
+                    popularFirstWord: true
+                })
                 channelString = channelString + '**Other Channels**(1% or less): ' + other + '%\n'
                 m.edit('', new Discord.RichEmbed({
                     author: {
@@ -280,8 +301,8 @@ async function getUserData(message, m, args) {
                         {name: '**Total messages, last 7 days:**', value: totalMsgsWk},
                         {name: '**Average messages per day, last 7 days:**', value: Math.round(avgMsgsD)},
                         {name: '**Average message length, last 7 days:**', value: Math.round(avgLen) + ' Characters'},
-                        {name: '**All-time activity by channel:**', value: channelString
-                        }
+                        {name: '**All-time activity by channel:**', value: channelString},
+                        {name: '**Random sentence:**', value: randomMessageText}
                     ]
                 }))
             }
