@@ -225,11 +225,11 @@ async function getUserData(message, m, args) {
             WHERE \"author\"=\'${id}\'
             AND \"server\" =\'${message.guild.id}\'`,
 
-            `SELECT SAMPLE(messageText,50)
+            `SELECT SAMPLE(messageText,1000)
             FROM chatMessage
             WHERE \"server\"='${message.guild.id}'
             AND \"author\"='${id}'
-            AND TIME >= now() - 30d`
+            AND TIME >= now() - 52w`
         ])
         .then(async results => {
             if (typeof results !== 'undefined') {
@@ -276,23 +276,29 @@ async function getUserData(message, m, args) {
                 })
                 randomMessageCorpus = []
                 randomMessages.forEach(value => randomMessageCorpus.push(value.sample))
+                randomMessageCorpus = randomMessageCorpus.filter(value => value != '')
                 randomMessageMarkov = new markovText()
                 randomMessageMarkov.init({
                     corpus: randomMessageCorpus,
-                    state_size: 3
+                    state_size: 2,
+                    DEFAULT_MAX_OVERLAP_RATIO: .6,
+                    DEFAULT_TRIES: 100
                 })
                 randomMessageText = randomMessageMarkov.predict({
                     init_state: null,
-                    max_chars: 150,
-                    numberOfSentences: 1,
+                    max_chars: 300,
+                    numberOfSentences: 2,
                     popularFirstWord: true
                 })
+                console.log(randomMessageText[0])
+                //message.channel.send(`CORPUS: ${randomMessageCorpus}`)
                 channelString = channelString + '**Other Channels**(1% or less): ' + other + '%\n'
                 m.edit('', new Discord.RichEmbed({
                     author: {
                         name: target.displayName,
                         icon_url: target.user.displayAvatarURL
                     },
+
                     title: '**Server Activity Stats**',
                     fields: [
                         {name: '**Total messages, all time:**', value: totalMsgs},
@@ -302,7 +308,7 @@ async function getUserData(message, m, args) {
                         {name: '**Average messages per day, last 7 days:**', value: Math.round(avgMsgsD)},
                         {name: '**Average message length, last 7 days:**', value: Math.round(avgLen) + ' Characters'},
                         {name: '**All-time activity by channel:**', value: channelString},
-                        {name: '**Random sentence:**', value: randomMessageText}
+                        {name: '**Random sentence:**', value: randomMessageText[0]}
                     ]
                 }))
             }
