@@ -160,6 +160,24 @@ async function checkUser(message) {
         })
 }
 
+async function getRandomMessage(message, m, arg) {
+    randomMessageCorpus = []
+    randomMessages.forEach(value => randomMessageCorpus.push(value.sample))
+    randomMessageCorpus = randomMessageCorpus.filter(value => value != '')
+    randomMessageMarkov = new markovText()
+    randomMessageMarkov.init({
+        corpus: randomMessageCorpus,
+        state_size: 2,
+        DEFAULT_MAX_OVERLAP_RATIO: .6,
+        DEFAULT_TRIES: 100
+    })
+    return randomMessageText = randomMessageMarkov.predict({
+        init_state: null,
+        max_chars: 300,
+        numberOfSentences: 2,
+        popularFirstWord: true
+    })
+}   
 
 async function getUserData(message, m, args) {
     // This function, called by the command %info, makes a series of queries,
@@ -274,23 +292,6 @@ async function getUserData(message, m, args) {
                         }
                     }
                 })
-                randomMessageCorpus = []
-                randomMessages.forEach(value => randomMessageCorpus.push(value.sample))
-                randomMessageCorpus = randomMessageCorpus.filter(value => value != '')
-                randomMessageMarkov = new markovText()
-                randomMessageMarkov.init({
-                    corpus: randomMessageCorpus,
-                    state_size: 2,
-                    DEFAULT_MAX_OVERLAP_RATIO: .6,
-                    DEFAULT_TRIES: 100
-                })
-                randomMessageText = randomMessageMarkov.predict({
-                    init_state: null,
-                    max_chars: 300,
-                    numberOfSentences: 2,
-                    popularFirstWord: true
-                })
-                console.log(randomMessageText[0])
                 //message.channel.send(`CORPUS: ${randomMessageCorpus}`)
                 channelString = channelString + '**Other Channels**(1% or less): ' + other + '%\n'
                 m.edit('', new Discord.RichEmbed({
@@ -308,7 +309,7 @@ async function getUserData(message, m, args) {
                         {name: '**Average messages per day, last 7 days:**', value: Math.round(avgMsgsD)},
                         {name: '**Average message length, last 7 days:**', value: Math.round(avgLen) + ' Characters'},
                         {name: '**All-time activity by channel:**', value: channelString},
-                        {name: '**Random sentence:**', value: randomMessageText[0]}
+                        {name: '**Random sentence:**', value: getRandomMessage(message, m, arg)}
                     ]
                 }))
             }
@@ -425,6 +426,9 @@ client.on("message", async message => {
     if(command === "info") {
         const m = await message.channel.send("Fetching Data...")
         getUserData(message, m, args)
+    }
+    if(command === "randommessage") {
+        message.channel.send(getRandomMessage(message, m, arg)
     }
 });
 client.login(config.token)
