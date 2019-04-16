@@ -165,7 +165,7 @@ async function getUserFromArgument(message, arg) {
     if (message.mentions.users.first() != null) {
         return message.guild.members.find('id', message.mentions.users.first().id)
     // Else, if supplied, look up the ID passed in the command's arguments
-    } else if (args.length == 1) {
+    } else if (arg) {
         return message.guild.members.find('id', arg)
     }
     return message.member
@@ -175,8 +175,8 @@ async function getRandomMessage(guildid, userid) {
     const rows = await influx.query(
         `SELECT SAMPLE(messageText,1000)
             FROM chatMessage
-            WHERE \"server\"='${message.guild.id}'
-            AND \"author\"='${id}'
+            WHERE \"server\"='${guildid}'
+            AND \"author\"='${userid}'
             AND TIME >= now() - 52w`
     )
 
@@ -186,7 +186,7 @@ async function getRandomMessage(guildid, userid) {
 
     const markov = new markovText()
     markov.init({
-        corpus: randomMessageCorpus,
+        corpus: corpus,
         state_size: 2,
         DEFAULT_MAX_OVERLAP_RATIO: .6,
         DEFAULT_TRIES: 100
@@ -206,10 +206,11 @@ async function getUserData(message, m, args) {
     // This function, called by the command %info, makes a series of queries,
     // formats them, and returns them in a pretty embed message
     //
-    const target = getUserFromArgument(message, args[0])
+    const target = await getUserFromArgument(message, args[0])
+    //console.log(target.user)
     const id = target.user.id
     var adjust = 0
-    const results = influx.query([
+    const results = await influx.query([
         `SELECT SUM(adjust)
         FROM chatMessage
         WHERE \"author\"=\'${id}\'
@@ -247,7 +248,12 @@ async function getUserData(message, m, args) {
         FROM chatMessage
         WHERE \"author\"=\'${id}\'
         AND \"server\" =\'${message.guild.id}\'
-        GROUP BY channelName`
+        GROUP BY channelName`,
+
+        `SELECT LAST(xp)
+        FROM chatMessage
+        WHERE \"author\"=\'${id}\'
+        AND \"server\"=\'${message.guild.id}\'`
    ])
     if (typeof results !== 'undefined') {
         if (typeof results[0][0] !== 'undefined') {
@@ -257,6 +263,7 @@ async function getUserData(message, m, args) {
         // Should make this fail gracefully
         // Maybe one day
         //
+        //console.log(results)
         var totalMsgs = results[1][0].count + adjust
         var totalMsgsWk = results[2][0].count
         var avgLen = results[3][0].mean
@@ -292,6 +299,8 @@ async function getUserData(message, m, args) {
         })
         //message.channel.send(`CORPUS: ${randomMessageCorpus}`)
         channelString = channelString + '**Other Channels**(1% or less): ' + other + '%\n'
+        var randomMessage = await getRandomMessage(message.guild.id, id)
+        //console.log(randomMessage)
         return new Discord.RichEmbed({
             author: {
                 name: target.displayName,
@@ -307,7 +316,7 @@ async function getUserData(message, m, args) {
                 {name: '**Average messages per day, last 7 days:**', value: Math.round(avgMsgsD)},
                 {name: '**Average message length, last 7 days:**', value: Math.round(avgLen) + ' Characters'},
                 {name: '**All-time activity by channel:**', value: channelString},
-                {name: '**Random sentence:**', value: getRandomMessage(message.guild.id, id)}
+                {name: '**Random sentence:**', value: randomMessage}
             ]
         })
     }
@@ -424,6 +433,7 @@ client.on("message", async message => {
         case "info":
             const m = await message.channel.send("Fetching Data...")
             const data = await getUserData(message, m, args)
+            //console.log(data)
             if(data != null) {
                 m.edit('', data)
             }
