@@ -160,159 +160,157 @@ async function checkUser(message) {
         })
 }
 
+async function getUserFromArgument(message, arg) {
+    // If called while tagging someone, make the mentioned user the target
+    if (message.mentions.users.first() != null) {
+        return message.guild.members.find('id', message.mentions.users.first().id)
+    // Else, if supplied, look up the ID passed in the command's arguments
+    } else if (args.length == 1) {
+        return message.guild.members.find('id', arg)
+    }
+    return message.member
+}
+
+async function getRandomMessage(guildid, userid) {
+    const rows = await influx.query(
+        `SELECT SAMPLE(messageText,1000)
+            FROM chatMessage
+            WHERE \"server\"='${message.guild.id}'
+            AND \"author\"='${id}'
+            AND TIME >= now() - 52w`
+    )
+
+    let corpus = []
+    rows.forEach(value => corpus.push(value.sample))
+    corpus = corpus.filter(value => value != '')
+
+    const markov = new markovText()
+    markov.init({
+        corpus: randomMessageCorpus,
+        state_size: 2,
+        DEFAULT_MAX_OVERLAP_RATIO: .6,
+        DEFAULT_TRIES: 100
+    })
+
+    const sentence = markov.predict({
+        init_state: null,
+        max_chars: 300,
+        numberOfSentences: 1,
+        popularFirstWord: true
+    })[0]
+
+    return sentence
+}
 
 async function getUserData(message, m, args) {
     // This function, called by the command %info, makes a series of queries,
     // formats them, and returns them in a pretty embed message
     //
-    if (message.mentions.users.array().length == 1) {
-        // If %info is called while tagging someone, make the mentioned user the target
-        //
-        var mentions = message.mentions.users.array()
-        var target = message.guild.members.find('id', mentions[0].id)
-    } else if (args.length == 1) {
-        // Else, if supplied, look up the ID passed in the command's arguments
-        //
-        var target = message.guild.members.find('id', args[0])
-    } else {
-        var target = message.member
-    }
-    var id = target.user.id
+    const target = getUserFromArgument(message, args[0])
+    const id = target.user.id
     var adjust = 0
-    influx.query(
-        [
-            `SELECT SUM(adjust)
-            FROM chatMessage
-            WHERE \"author\"=\'${id}\'
-            AND \"server\" =\'${message.guild.id}\'
-            fill(0)`,
+    const results = influx.query([
+        `SELECT SUM(adjust)
+        FROM chatMessage
+        WHERE \"author\"=\'${id}\'
+        AND \"server\" =\'${message.guild.id}\'
+        fill(0)`,
 
-            `SELECT COUNT(messageSent)
-            FROM chatMessage
-            WHERE \"author\"=\'${id}\'
-            AND \"server\" =\'${message.guild.id}\'
-            fill(0)`,
+        `SELECT COUNT(messageSent)
+        FROM chatMessage
+        WHERE \"author\"=\'${id}\'
+        AND \"server\" =\'${message.guild.id}\'
+        fill(0)`,
 
-            `SELECT COUNT(messageSent)
-            FROM chatMessage
-            WHERE \"author\"=\'${id}\'
-            AND \"server\" =\'${message.guild.id}\'
-            AND time > now() -7d`,
+        `SELECT COUNT(messageSent)
+        FROM chatMessage
+        WHERE \"author\"=\'${id}\'
+        AND \"server\" =\'${message.guild.id}\'
+        AND time > now() -7d`,
 
-            `SELECT MEAN(messageLength)
-            FROM chatMessage
-            WHERE \"author\"=\'${id}\'
-            AND \"server\" =\'${message.guild.id}\'
-            AND time > now() - 7d
-            FILL(0)`,
+        `SELECT MEAN(messageLength)
+        FROM chatMessage
+        WHERE \"author\"=\'${id}\'
+        AND \"server\" =\'${message.guild.id}\'
+        AND time > now() - 7d
+        FILL(0)`,
 
-            `SELECT MOVING_AVERAGE(COUNT(messageSent),9)
-            FROM chatMessage
-            WHERE \"author\"=\'${id}\'
-            AND \"server\" =\'${message.guild.id}\'
-            AND time > now() - 7d
-            GROUP BY time(1d)
-            FILL(0)`,
+        `SELECT MOVING_AVERAGE(COUNT(messageSent),9)
+        FROM chatMessage
+        WHERE \"author\"=\'${id}\'
+        AND \"server\" =\'${message.guild.id}\'
+        AND time > now() - 7d
+        GROUP BY time(1d)
+        FILL(0)`,
 
-            `SELECT COUNT(messageSent)
-            FROM chatMessage
-            WHERE \"author\"=\'${id}\'
-            AND \"server\" =\'${message.guild.id}\'
-            GROUP BY channelName`,
-
-            `SELECT LAST(xp)
-            FROM chatMessage
-            WHERE \"author\"=\'${id}\'
-            AND \"server\" =\'${message.guild.id}\'`,
-
-            `SELECT SAMPLE(messageText,1000)
-            FROM chatMessage
-            WHERE \"server\"='${message.guild.id}'
-            AND \"author\"='${id}'
-            AND TIME >= now() - 52w`
-        ])
-        .then(async results => {
-            if (typeof results !== 'undefined') {
-                if (typeof results[0][0] !== 'undefined') {
-                    adjust = results[0].sum
-                }
-                // A bunch of variable declarations based on the query results
-                // Should make this fail gracefully
-                // Maybe one day
-                //
-                var totalMsgs = results[1][0].count + adjust
-                var totalMsgsWk = results[2][0].count
-                var avgLen = results[3][0].mean
-                var avgMsgsD = results[4][0].moving_average
-                var channelBrkdn = results[5]
-                var xp = ''
-                if (typeof results[6][0] == 'undefined'){
-                    xp = await getXP(target)
+        `SELECT COUNT(messageSent)
+        FROM chatMessage
+        WHERE \"author\"=\'${id}\'
+        AND \"server\" =\'${message.guild.id}\'
+        GROUP BY channelName`
+   ])
+    if (typeof results !== 'undefined') {
+        if (typeof results[0][0] !== 'undefined') {
+            adjust = results[0].sum
+        }
+        // A bunch of variable declarations based on the query results
+        // Should make this fail gracefully
+        // Maybe one day
+        //
+        var totalMsgs = results[1][0].count + adjust
+        var totalMsgsWk = results[2][0].count
+        var avgLen = results[3][0].mean
+        var avgMsgsD = results[4][0].moving_average
+        var channelBrkdn = results[5]
+        var xp = ''
+        if (typeof results[6][0] == 'undefined'){
+            xp = await getXP(target)
+        } else {
+            var xp = results[6][0].last
+        }
+        var ratio = Math.round((totalMsgs / xp) * 100) / 100
+        var channel = ""
+        var msgs
+        var channelString = ""
+        var other = 0
+        var forceother = config.ignore_channels
+        channelBrkdn.forEach(function(value){
+            // Generate the string for all-time channel participation, as a percentage
+            // of the user's all-time messages
+            // Also, ignore channels that we maybe don't want showing up in the breakdown
+            // Like private channels, modchat, NSFW, whatever. Add them to the "other channels" entry
+            if (value.count !== 'undefined'){
+                channel = value.channelName
+                msgs = value.count
+                var percent = Math.round(value.count * 100 / totalMsgs)
+                if (percent <= 1  || forceother.includes(channel)) {
+                    other = other + percent
                 } else {
-                    var xp = results[6][0].last
+                    channelString = channelString + '**' + channel + '**' + ': ' + percent + '%' + '\n'
                 }
-                var randomMessages = results[7]
-                var ratio = Math.round((totalMsgs / xp) * 100) / 100
-                var channel = ""
-                var msgs
-                var channelString = ""
-                var other = 0
-                var forceother = config.ignore_channels
-                channelBrkdn.forEach(function(value){
-                    // Generate the string for all-time channel participation, as a percentage
-                    // of the user's all-time messages
-                    // Also, ignore channels that we maybe don't want showing up in the breakdown
-                    // Like private channels, modchat, NSFW, whatever. Add them to the "other channels" entry
-                    if (value.count !== 'undefined'){
-                        channel = value.channelName
-                        msgs = value.count
-                        var percent = Math.round(value.count * 100 / totalMsgs)
-                        if (percent <= 1  || forceother.includes(channel)) {
-                            other = other + percent
-                        } else {
-                            channelString = channelString + '**' + channel + '**' + ': ' + percent + '%' + '\n'
-                        }
-                    }
-                })
-                randomMessageCorpus = []
-                randomMessages.forEach(value => randomMessageCorpus.push(value.sample))
-                randomMessageCorpus = randomMessageCorpus.filter(value => value != '')
-                randomMessageMarkov = new markovText()
-                randomMessageMarkov.init({
-                    corpus: randomMessageCorpus,
-                    state_size: 2,
-                    DEFAULT_MAX_OVERLAP_RATIO: .6,
-                    DEFAULT_TRIES: 100
-                })
-                randomMessageText = randomMessageMarkov.predict({
-                    init_state: null,
-                    max_chars: 300,
-                    numberOfSentences: 2,
-                    popularFirstWord: true
-                })
-                console.log(randomMessageText[0])
-                //message.channel.send(`CORPUS: ${randomMessageCorpus}`)
-                channelString = channelString + '**Other Channels**(1% or less): ' + other + '%\n'
-                m.edit('', new Discord.RichEmbed({
-                    author: {
-                        name: target.displayName,
-                        icon_url: target.user.displayAvatarURL
-                    },
-
-                    title: '**Server Activity Stats**',
-                    fields: [
-                        {name: '**Total messages, all time:**', value: totalMsgs},
-                        {name: '**XP**: ', value: xp},
-                        {name: '**Messages per XP:** ', value: ratio.toString()},
-                        {name: '**Total messages, last 7 days:**', value: totalMsgsWk},
-                        {name: '**Average messages per day, last 7 days:**', value: Math.round(avgMsgsD)},
-                        {name: '**Average message length, last 7 days:**', value: Math.round(avgLen) + ' Characters'},
-                        {name: '**All-time activity by channel:**', value: channelString},
-                        {name: '**Random sentence:**', value: randomMessageText[0]}
-                    ]
-                }))
             }
         })
+        //message.channel.send(`CORPUS: ${randomMessageCorpus}`)
+        channelString = channelString + '**Other Channels**(1% or less): ' + other + '%\n'
+        return new Discord.RichEmbed({
+            author: {
+                name: target.displayName,
+                icon_url: target.user.displayAvatarURL
+            },
+
+            title: '**Server Activity Stats**',
+            fields: [
+                {name: '**Total messages, all time:**', value: totalMsgs},
+                {name: '**XP**: ', value: xp},
+                {name: '**Messages per XP:** ', value: ratio.toString()},
+                {name: '**Total messages, last 7 days:**', value: totalMsgsWk},
+                {name: '**Average messages per day, last 7 days:**', value: Math.round(avgMsgsD)},
+                {name: '**Average message length, last 7 days:**', value: Math.round(avgLen) + ' Characters'},
+                {name: '**All-time activity by channel:**', value: channelString},
+                {name: '**Random sentence:**', value: getRandomMessage(message.guild.id, id)}
+            ]
+        })
+    }
     checkUser(message)
 }
 
@@ -422,9 +420,19 @@ client.on("message", async message => {
     if(message.content.indexOf(config.prefix) !== 0) return;
     const args = message.content.slice(config.prefix.length).trim().split(/ +/g);
     const command = args.shift().toLowerCase();
-    if(command === "info") {
-        const m = await message.channel.send("Fetching Data...")
-        getUserData(message, m, args)
+    switch(command) {
+        case "info":
+            const m = await message.channel.send("Fetching Data...")
+            const data = await getUserData(message, m, args)
+            if(data != null) {
+                m.edit('', data)
+            }
+            break
+        case "randommessage":
+            const target = getUserFromArgument(message, args[0])
+            message.channel.send(getRandomMessage(message.guild.id, target.id).replace(/__BEGIN__ /, ''))
+            break
     }
 });
+
 client.login(config.token)
