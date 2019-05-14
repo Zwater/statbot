@@ -12,7 +12,16 @@ if (config.elastic.enabled == "true") {
     });
 }
 var checkusers = {}
+const invites = {};
+const wait = require('util').promisify(setTimeout);
+
 client.on("ready", () => {
+    wait(1000);
+    client.guilds.forEach(g => {
+      g.fetchInvites().then(guildInvites => {
+        invites[g.id] = guildInvites;
+      });
+    });
     console.log(`Bot has started, with ${client.users.size} users, in ${client.channels.size} channels of ${client.guilds.size} guilds.`);
     client.user.setActivity('With Data');
 });
@@ -339,6 +348,14 @@ client.on("guildMemberAdd", async member => {
             }
         }
     ])
+    member.guild.fetchInvites().then(guildInvites => {
+      const ei = invites[member.guild.id];
+      invites[member.guild.id] = guildInvites;
+      const invite = guildInvites.fine(i => ei.get(i.code_.uses < i.uses);
+      const inviter = client.users.get(invite.inviter.id);
+      const logChannel = member.guild.channels.find(channel => channel.name === "join-logs");
+      logChannel.send(`${member.user.tag} joined using invite code ${invite.code} from ${inviter.tag}. Used ${invite.uses} times.`);
+    });
 })
 client.on("guildMemberRemove", async member => {
     var timestamp = new Date();
